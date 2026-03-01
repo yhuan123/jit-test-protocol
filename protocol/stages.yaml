@@ -1,0 +1,261 @@
+# JiT Test Protocol — 生命周期阶段定义
+#
+# 本文件定义 8 阶段测试生命周期的状态机。
+# 所有内容是通用的（与具体测试对象无关），
+# 领域特有的质量门和动作由 Adapter 扩展。
+#
+# 状态流转：
+#   triage → brainstorm → plan(审批) → env_setup → execute → report → optimize → regression(审批)
+#                                                                                      |
+#                                                                         optimize ←───┘
+
+# 项目实例信息（jit-init 初始化时填充）
+project:
+  name: "{{PROJECT_NAME}}"
+  test_object: "{{TEST_OBJECT}}"
+  kubeconfig: "{{KUBECONFIG_PATH}}"
+  namespace: "{{NAMESPACE}}"
+  adapter: "{{ADAPTER_NAME}}"
+  created_at: "{{CREATED_AT}}"
+
+# ─────────────────────────────────────────────
+# 阶段定义
+# ─────────────────────────────────────────────
+stages:
+
+  # ── 1. Triage：需求分析 ──
+  triage:
+    order: 1
+    description: "接收 PR/需求/制品，分析测试范围和优先级"
+    agent: coordinator
+    parallel: false
+    human_approval: false
+    inputs:
+      - "PR URL 或需求描述"
+      - "测试对象版本信息"
+    outputs:
+      - "brainstorms/{{DATE}}-triage-notes.md"
+    quality_gate:
+      - "测试对象已明确（类型 + 版本）"
+      - "测试范围已界定（功能点列表）"
+      - "优先级已标注（P0/P1/P2）"
+    actions:
+      - "读取 PR diff 或需求文档"
+      - "识别变更涉及的功能点"
+      - "评估测试优先级和风险等级"
+      - "输出 triage 笔记到 brainstorms/"
+
+  # ── 2. Brainstorm：技术方案探索 ──
+  brainstorm:
+    order: 2
+    description: "并行探索：coordinator 分析测试策略 + env-checker 检查集群就绪状态"
+    agent: coordinator
+    parallel: true
+    parallel_strategy:
+      - agent: coordinator
+        task: "分析测试对象代码，设计用例矩阵，识别边界条件"
+      - agent: env-checker
+        task: "执行集群预检，验证环境就绪"
+    human_approval: false
+    inputs:
+      - "triage 阶段的输出笔记"
+      - "测试对象源代码/定义"
+    outputs:
+      - "brainstorms/{{DATE}}-test-strategy.md"
+      - "brainstorms/{{DATE}}-env-check.md"
+    quality_gate:
+      - "测试用例矩阵已生成（含正向/反向/边界）"
+      - "环境预检全部通过（或已知问题已标注）"
+      - "已知失败模式已对照 known-patterns"
+    # adapter_quality_gate: Adapter 可追加额外检查项
+    actions:
+      - "coordinator: 阅读测试对象源代码/定义"
+      - "coordinator: 设计用例矩阵（正向、反向、边界、异常）"
+      - "env-checker: 执行集群预检"
+      - "env-checker: 验证目标资源可创建"
+
+  # ── 3. Plan：制定测试计划（需用户审批）──
+  plan:
+    order: 3
+    description: "基于 brainstorm 结果编写完整测试计划，需用户审批后才能继续"
+    agent: coordinator
+    parallel: false
+    human_approval: true
+    approval_prompt: |
+      测试计划已生成，请审阅：
+      - 文件位置：plans/{{DATE}}-test-plan.md
+      - 包含 {{CASE_COUNT}} 个测试用例
+      确认后将进入环境准备和测试执行阶段。
+    inputs:
+      - "brainstorm 阶段输出"
+    outputs:
+      - "plans/{{DATE}}-test-plan.md"
+    quality_gate:
+      - "每个用例有明确的：ID、标题、前置条件、步骤、预期结果、验证命令"
+      - "用例覆盖所有 P0 功能点"
+      - "回归用例已标注（如有历史 Bug）"
+      - "用户已审批计划"
+    actions:
+      - "整合 brainstorm 结果为结构化计划"
+      - "为每个用例编写测试资源 YAML"
+      - "标注用例间的依赖关系和并行可能性"
+      - "等待用户审批"
+
+  # ── 4. Env Setup：环境准备 ──
+  env_setup:
+    order: 4
+    description: "准备测试所需的集群资源（namespace、secret、configmap 等）"
+    agent: test-executor
+    parallel: false
+    human_approval: false
+    inputs:
+      - "审批后的测试计划"
+      - "计划中标注的环境依赖"
+    outputs:
+      - "memory/context.md 更新（记录已创建的资源）"
+    quality_gate:
+      - "namespace 存在且可用"
+      - "所有 Secret/ConfigMap 已创建"
+      - "测试镜像可拉取（实际验证）"
+      - "目标资源类型的 CRD 已注册"
+    # adapter_quality_gate: Adapter 可追加领域特有检查项（见 adapter.yaml → env_checks）
+    actions:
+      - "创建/验证 namespace"
+      - "创建测试所需 Secret（认证、TLS 等）"
+      - "创建测试所需 ConfigMap（CA 证书等）"
+      - "执行 smoke test 验证基础环境"
+
+  # ── 5. Execute：执行测试（可并行）──
+  execute:
+    order: 5
+    description: "执行测试用例，最多 3 个 test-executor 并行"
+    agent: test-executor
+    parallel: true
+    parallel_strategy:
+      max_concurrent: 3
+      grouping: "independent"
+      failure_policy: "continue"
+    human_approval: false
+    inputs:
+      - "审批后的测试计划中的用例列表"
+      - "env_setup 阶段确认的环境就绪状态"
+    outputs:
+      - "testdata/{{TC_ID}}-run.yaml"
+      - "testdata/{{TC_ID}}-result.json"
+    quality_gate:
+      - "所有用例已执行（PASSED/FAILED/SKIPPED）"
+      - "每个 FAILED 用例有完整日志和失败原因"
+      - "每个 FAILED 用例已对照 known-patterns 自动诊断"
+    actions:
+      - "按计划顺序（或并行分组）apply 测试资源"
+      - "等待资源完成（timeout 按计划设定）"
+      - "收集执行日志和 status"
+      - "执行计划中的验证命令"
+      - "FAILED 用例自动匹配 known-patterns 给出初步诊断"
+
+  # ── 6. Report：生成报告 ──
+  report:
+    order: 6
+    description: "汇编所有用例结果为 Markdown 报告"
+    agent: report-generator
+    parallel: false
+    human_approval: false
+    inputs:
+      - "testdata/ 下所有用例结果"
+      - "测试计划（作为报告框架）"
+    outputs:
+      - "reports/{{DATE}}-test-results.md"
+    quality_gate:
+      - "报告包含：环境信息、用例汇总表、每个用例详情、已知问题、结论"
+      - "PASS/FAIL 统计准确"
+      - "每个 FAILED 用例有失败原因和建议"
+    actions:
+      - "汇总所有用例执行结果"
+      - "生成用例汇总表（ID、标题、结果、耗时）"
+      - "为每个 FAILED 用例编写详细分析"
+      - "输出整体结论和建议"
+
+  # ── 7. Optimize：流程优化回顾 ──
+  optimize:
+    order: 7
+    description: "回顾本轮执行，优化框架本身（展示改动给用户确认后再写入）"
+    agent: coordinator
+    parallel: false
+    human_approval: false
+    inputs:
+      - "本轮执行的所有 testdata/ 结果"
+      - "reports/ 中的测试报告"
+      - "known-patterns 当前内容"
+      - "stages.yaml 当前配置"
+    outputs:
+      - "brainstorms/{{DATE}}-optimize-review.md"
+    quality_gate:
+      - "6 个回顾维度均已检查"
+      - "改动建议已列出并获用户确认"
+    review_dimensions:
+      new_failure_patterns:
+        check: "本轮是否出现 known-patterns 未收录的失败？"
+        target: "known-patterns"
+      quality_gate_effectiveness:
+        check: "有没有质量门漏放了不该过的？太严阻碍了？"
+        target: "stages.yaml → quality_gate"
+      execution_efficiency:
+        check: "哪些用例耗时异常？哪些可以并行但没有？"
+        target: "stages.yaml → parallel_strategy"
+      agent_constraints:
+        check: "agent 权限是否太宽或太窄？"
+        target: "agent 定义文件"
+      template_improvements:
+        check: "本项目暴露了模板/协议的哪些不足？"
+        target: "~/.jit-test-protocol/"
+      context_completeness:
+        check: "memory/context.md 信息是否足够下次 session 恢复？"
+        target: "memory/context.md"
+    actions:
+      - "逐一检查 6 个回顾维度"
+      - "汇总发现和建议到优化报告"
+      - "展示改动建议给用户确认"
+      - "用户确认后写入目标文件"
+
+  # ── 8. Regression：回归测试（需用户审批）──
+  regression:
+    order: 8
+    description: "Bug 修复后的回归测试，需用户审批回归计划"
+    agent: coordinator
+    parallel: false
+    human_approval: true
+    approval_prompt: |
+      回归测试计划已生成，请审阅：
+      - 文件位置：plans/{{DATE}}-regression-plan.md
+      - 涵盖 {{REGRESSION_COUNT}} 个回归用例
+      - 关联 Bug：{{BUG_IDS}}
+      确认后将执行回归测试。
+    inputs:
+      - "前一轮报告中的 FAILED 用例"
+      - "Bug 修复信息（PR/版本号）"
+    outputs:
+      - "plans/{{DATE}}-regression-plan.md"
+      - "reports/{{DATE}}-regression-results.md"
+    quality_gate:
+      - "所有 P0 Bug 对应用例已回归"
+      - "回归报告已生成并引用原始报告"
+      - "用户已审批回归计划"
+    actions:
+      - "从前一轮报告提取 FAILED 用例"
+      - "制定回归测试计划"
+      - "等待用户审批"
+      - "执行回归用例（复用 execute 阶段流程）"
+      - "生成回归报告"
+      - "进入 optimize 阶段回顾"
+
+# ─────────────────────────────────────────────
+# 全局配置
+# ─────────────────────────────────────────────
+global:
+  timeout_per_case: 300
+  max_parallel_executors: 3
+  report_format: "markdown"
+  date_format: "YYYY-MM-DD"
+  auto_diagnose: true
+  context_file: "memory/context.md"
+  known_patterns_file: "known-patterns"  # 由项目中的合并文件路径决定

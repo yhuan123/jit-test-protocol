@@ -1,0 +1,74 @@
+# {{PROJECT_NAME}} — 跨 Session 状态
+
+> 本文件由 agent 维护，记录项目当前状态，供下次 session 快速恢复上下文。
+
+## 项目信息
+
+| 要素 | 值 |
+|------|-----|
+| 项目名 | {{PROJECT_NAME}} |
+| 测试对象 | {{TEST_OBJECT}} |
+| Adapter | tekton |
+| kubeconfig | `{{KUBECONFIG_PATH}}` |
+| Namespace | `{{NAMESPACE}}` |
+| Hub Resolver | `{{HUB_RESOLVER_REF}}` |
+| 创建时间 | {{CREATED_AT}} |
+
+## 当前状态
+
+| 字段 | 值 |
+|------|-----|
+| **当前阶段** | `triage` |
+| **上次更新** | {{CREATED_AT}} |
+| **上次操作** | 项目初始化 |
+| **阻塞问题** | 无 |
+
+## 阶段历史
+
+| 阶段 | 状态 | 进入时间 | 完成时间 | 备注 |
+|------|------|----------|----------|------|
+| triage | pending | — | — | |
+| brainstorm | — | — | — | |
+| plan | — | — | — | |
+| env_setup | — | — | — | |
+| execute | — | — | — | |
+| report | — | — | — | |
+| optimize | — | — | — | |
+| regression | — | — | — | |
+
+## 测试用例状态
+
+> 在 plan 阶段完成后填充
+
+| TC | 标题 | 状态 | 最后执行 | 备注 |
+|----|------|------|----------|------|
+| | | | | |
+
+## 环境状态
+
+> 在 env_setup 阶段完成后填充
+
+| 资源 | 状态 | 备注 |
+|------|------|------|
+| Namespace | — | |
+| Secrets | — | |
+| ConfigMaps | — | |
+| Tekton Pipelines | — | |
+| Hub Resolver | — | |
+| Operator 版本 | — | |
+
+## 已发现的问题
+
+> 在 execute 阶段发现问题时填充
+
+| Bug ID | 严重级别 | 描述 | 状态 | 关联 TC |
+|--------|----------|------|------|---------|
+| | | | | |
+
+## 下次 Session 应做的事
+
+1. [待填充]
+
+## 备注
+
+[自由记录区]

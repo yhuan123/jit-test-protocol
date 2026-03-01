@@ -1,0 +1,72 @@
+# {{PROJECT_NAME}} — JiT 测试项目 (OpenCode)
+
+> 本文件是 CLAUDE.md.template 的 OpenCode 变体，内容等价。
+
+## Session 启动协议（每次新会话必做）
+
+1. **读取状态**: `memory/context.md` — 获取当前阶段和历史
+2. **读取定义**: `lifecycle/stages.yaml` — 获取阶段要求
+3. **读取 Adapter**: `~/.jit-test-protocol/adapters/tekton/adapter.yaml` — Tekton 特有配置
+4. **报告状态**: 向用户汇报当前位置
+5. **询问方向**: 问用户"继续当前阶段 / 跳到指定阶段 / 其他操作"
+
+## 项目配置
+
+| 要素 | 值 |
+|------|-----|
+| 测试对象 | `{{TEST_OBJECT}}` |
+| Adapter | `tekton` |
+| kubeconfig | `{{KUBECONFIG_PATH}}` |
+| Namespace | `{{NAMESPACE}}` |
+| 集群架构 | {{CLUSTER_ARCH}} |
+| Hub Resolver | `{{HUB_RESOLVER_REF}}` |
+| Protocol 路径 | `~/.jit-test-protocol/` |
+
+## 生命周期规则
+
+- 严格按 `lifecycle/stages.yaml` 定义的顺序推进
+- 每个阶段的 quality_gate 全部满足后才能进入下一阶段
+- `human_approval: true` 的阶段必须等用户明确确认
+- 质量门参考：`~/.jit-test-protocol/protocol/quality-gates.md`
+- 质量门是硬性要求，不是建议
+
+### 用户审批点
+
+1. **plan** — 测试计划完成后
+2. **regression** — 回归计划完成后
+
+## Agent 协调
+
+| Agent | 用途 | 写集群 | 写文件 |
+|-------|------|--------|--------|
+| coordinator | 编排生命周期 | no | no |
+| env-checker | 环境预检 | no (read-only) | no |
+| test-executor | 执行测试 | yes (test NS only) | testdata/ only |
+| report-generator | 生成报告 | no | reports/ only |
+
+## 自动诊断
+
+FAILED 用例自动匹配：
+1. `~/.jit-test-protocol/protocol/known-patterns/common.md`
+2. `~/.jit-test-protocol/adapters/tekton/known-patterns.md`
+
+## 文件规范
+
+| 目录 | 用途 |
+|------|------|
+| brainstorms/ | 需求分析 |
+| plans/ | 测试计划 |
+| testdata/ | YAML、结果、日志 |
+| reports/ | 报告 |
+| memory/ | 跨 session 状态 |
+
+## 通用约束
+
+- 运行测试前必须确认范围
+- 部署前必须执行 K8s 预检
+- 严格遵循用户指定方案
+- 用户中断即立即停止
+
+## 补充信息
+
+{{ADDITIONAL_NOTES}}

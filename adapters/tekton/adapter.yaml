@@ -1,0 +1,65 @@
+# Tekton Adapter — 领域配置
+# 定义 Tekton TaskRun/PipelineRun 测试的特有配置
+
+name: tekton
+version: "0.1"
+description: "Tekton TaskRun/PipelineRun 功能测试适配器"
+
+# 执行命令模板（{{placeholder}} 由 test-executor 在运行时替换）
+commands:
+  apply: "kubectl apply -f {{yaml_file}} -n {{namespace}}"
+  wait_succeeded: "kubectl wait --for=condition=Succeeded {{resource_type}}/{{resource_name}} -n {{namespace}} --timeout={{timeout}}s"
+  wait_failed: "kubectl wait --for=condition=Succeeded=False {{resource_type}}/{{resource_name}} -n {{namespace}} --timeout={{timeout}}s"
+  logs: "kubectl logs {{resource_type}}/{{resource_name}} -n {{namespace}} --all-containers"
+  status: "kubectl get {{resource_type}}/{{resource_name}} -n {{namespace}} -o json"
+  verify: "kubectl get {{resource_type}}/{{resource_name}} -n {{namespace}} -o jsonpath='{.status.conditions[0].type}'"
+  cleanup: "kubectl delete {{resource_type}}/{{resource_name}} -n {{namespace}} --ignore-not-found"
+
+# 支持的 K8s 资源类型
+resource_types:
+  - TaskRun
+  - PipelineRun
+
+# 环境预检项（追加到 Protocol 通用检查之后）
+env_checks:
+  - description: "Tekton Pipelines Controller 运行中"
+    command: "kubectl get pods -n tekton-pipelines -l app=tekton-pipelines-controller --field-selector=status.phase=Running"
+    pass_condition: "至少 1 个 Pod Running"
+  - description: "Hub Resolver 可用"
+    command: "kubectl get deployment -n tekton-pipelines-resolvers"
+    pass_condition: "Deployment Available"
+  - description: "Tekton CRD 已注册"
+    command: "kubectl get crd tasks.tekton.dev pipelineruns.tekton.dev"
+    pass_condition: "CRD 存在"
+  - description: "目标 Task/Pipeline 版本可解析"
+    command: "kubectl create -f <dry-run-taskrun> --dry-run=server"
+    pass_condition: "dry-run 不报 resolution error"
+
+# jit-init 时的额外参数
+additional_fields:
+  - name: hub_resolver_ref
+    description: "Hub Resolver 引用（如 catalog/task/merge-image/0.1）"
+    required: true
+    example: "catalog/task/merge-image/0.1"
+  - name: cluster_arch
+    description: "集群架构（amd64/arm64/mixed）"
+    required: false
+    default: "amd64"
+
+# 默认镜像（smoke test / 工具镜像）
+default_image: "152-231-registry.alauda.cn:60070/devops/tektoncd/hub/run-script:v3.21"
+
+# 验证工具差异化建议
+verification_tools:
+  - scenario: "镜像 manifest list"
+    tested_by: "Task 内 crane"
+    verify_with: "skopeo inspect --raw"
+    avoid: "crane manifest（与被测同源）"
+  - scenario: "Registry 认证"
+    tested_by: "Task 内 crane auth"
+    verify_with: "curl -u user:pass registry/v2/"
+    avoid: "crane auth"
+  - scenario: "TLS 证书"
+    tested_by: "Task 内工具"
+    verify_with: "openssl s_client"
+    avoid: "被测工具相关命令"

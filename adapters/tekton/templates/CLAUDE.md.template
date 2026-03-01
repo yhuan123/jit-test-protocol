@@ -1,0 +1,127 @@
+# {{PROJECT_NAME}} — JiT 测试项目
+
+## Session 启动协议（每次新会话必做）
+
+1. **读取状态**: `memory/context.md` — 获取当前阶段和历史
+2. **读取定义**: `lifecycle/stages.yaml` — 获取阶段要求
+3. **读取 Adapter**: `~/.jit-test-protocol/adapters/tekton/adapter.yaml` — Tekton 特有配置
+4. **报告状态**: 向用户汇报当前位置
+5. **询问方向**: 问用户"继续当前阶段 / 跳到指定阶段 / 其他操作"
+
+### 启动话术模板
+
+> "{{PROJECT_NAME}} 测试项目，当前处于 **{{CURRENT_STAGE}}** 阶段。
+>
+> [阶段状态摘要]
+>
+> 是否继续？"
+
+---
+
+## 项目配置
+
+| 要素 | 值 |
+|------|-----|
+| 测试对象 | `{{TEST_OBJECT}}` |
+| Adapter | `tekton` |
+| kubeconfig | `{{KUBECONFIG_PATH}}` |
+| Namespace | `{{NAMESPACE}}` |
+| 集群架构 | {{CLUSTER_ARCH}} |
+| Hub Resolver | `{{HUB_RESOLVER_REF}}` |
+| Protocol 路径 | `~/.jit-test-protocol/` |
+
+### kubeconfig 快捷
+
+```bash
+export KUBECONFIG={{KUBECONFIG_PATH}}
+```
+
+---
+
+## 生命周期规则
+
+### 阶段推进
+
+- **严格按 `lifecycle/stages.yaml` 定义的顺序推进**
+- 每个阶段的 `quality_gate` 全部满足后才能进入下一阶段
+- `human_approval: true` 的阶段必须等用户明确确认
+- 不允许跳过阶段（除非用户明确要求）
+- 质量门参考：`~/.jit-test-protocol/protocol/quality-gates.md`
+
+### 质量门
+
+- 质量门是**硬性要求**，不是建议
+- 如果质量门未满足，列出缺失项并建议如何补足
+- 不要"勉强通过"质量门
+
+### 用户审批点
+
+只有两个阶段需要用户审批：
+1. **plan** — 测试计划完成后，等用户审阅
+2. **regression** — 回归计划完成后，等用户审阅
+
+---
+
+## Agent 协调规则
+
+### 可用 Agent
+
+| Agent | 文件 | 用途 | 写集群 | 写文件 |
+|-------|------|------|--------|--------|
+| coordinator | `.claude/agents/coordinator.md` | 编排生命周期 | ❌ | ❌ |
+| env-checker | `.claude/agents/env-checker.md` | 环境预检 | ❌ | ❌ |
+| test-executor | `.claude/agents/test-executor.md` | 执行测试 | ✅ | testdata/ only |
+| report-generator | `.claude/agents/report-generator.md` | 生成报告 | ❌ | reports/ only |
+
+### 并行执行
+
+- **brainstorm 阶段**: coordinator + env-checker 可并行
+- **execute 阶段**: 最多 3 个 test-executor 并行（独立用例）
+
+---
+
+## 自动诊断
+
+当测试用例 FAILED 时：
+1. 读取 `~/.jit-test-protocol/protocol/known-patterns/common.md`（通用 K8s 模式）
+2. 读取 `~/.jit-test-protocol/adapters/tekton/known-patterns.md`（Tekton 模式）
+3. 匹配失败日志中的关键字
+4. 命中 → 附加诊断和修复建议
+5. 未命中 → 标记"新失败模式"，在 optimize 阶段追加
+
+---
+
+## 文件规范
+
+| 目录 | 用途 | 谁写 |
+|------|------|------|
+| `brainstorms/` | 需求分析、策略探索 | coordinator |
+| `plans/` | 测试计划 | coordinator |
+| `testdata/` | 测试资源 YAML、结果 JSON、日志 | test-executor |
+| `reports/` | 测试报告 | report-generator |
+| `memory/` | 跨 session 状态 | coordinator |
+| `lifecycle/` | 生命周期定义 | optimize 阶段经用户确认 |
+
+### 命名规则
+
+- 日期前缀：`YYYY-MM-DD-`
+- brainstorms: `{{DATE}}-{{topic}}.md`
+- plans: `{{DATE}}-test-plan.md`
+- reports: `{{DATE}}-test-results.md`
+- testdata: `TC-XX-run.yaml`、`TC-XX-result.json`
+
+---
+
+## 通用约束
+
+- 运行测试前必须确认范围
+- 部署前必须执行 K8s 预检
+- 严格遵循用户指定方案
+- 用户中断即立即停止
+- 精准编辑，不擅自修改无关代码
+
+---
+
+## 补充信息
+
+{{ADDITIONAL_NOTES}}
