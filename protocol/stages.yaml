@@ -153,27 +153,64 @@ stages:
       - "执行计划中的验证命令"
       - "FAILED 用例自动匹配 known-patterns 给出初步诊断"
 
-  # ── 6. Report：生成报告 ──
+  # ── 6. Report：生成报告（分层 / Legacy 双模式）──
   report:
     order: 6
-    description: "汇编所有用例结果为 Markdown 报告"
-    agent: report-generator
-    parallel: false
+    description: "分层生成测试报告（Index + Batch），或降级为单文件模式"
     human_approval: false
-    inputs:
-      - "testdata/ 下所有用例结果"
-      - "测试计划（作为报告框架）"
-    outputs:
-      - "reports/{{DATE}}-test-results.md"
+    # ── 分层模式：存在 batch-manifest.json 时激活 ──
+    sub_steps:
+      - name: generate_manifest
+        description: "生成 batch-manifest.json（由 /jit-report skill 主会话执行）"
+        agent: null  # skill 自己执行，不委派 agent
+        inputs:
+          - "测试计划（功能分组信息）"
+          - "testdata/TC-*-result.json（实际结果文件列表）"
+        outputs:
+          - "testdata/batch-manifest.json"
+      - name: batch_report
+        description: "按批次生成详细报告"
+        agent: batch-reporter
+        parallel: true
+        max_concurrent: 3
+        inputs:
+          - "testdata/batch-manifest.json（该 batch 的 TC 列表）"
+          - "对应 batch 的 TC-XX-result.json 和 TC-XX-logs.txt"
+        outputs:
+          - "reports/batch-{N}-{label}/batch-{N}-results.md"
+      - name: summary_aggregate
+        description: "聚合各 batch 摘要生成 Index 报告"
+        agent: summary-aggregator
+        depends_on: batch_report
+        inputs:
+          - "所有 batch-{N}-results.md 的 ## 摘要 section"
+          - "memory/context.md（项目元数据）"
+        outputs:
+          - "reports/{{DATE}}-test-results.md"
+    # ── Legacy 模式：无 batch-manifest.json 或回归测试时使用 ──
+    legacy:
+      agent: report-generator
+      parallel: false
+      inputs:
+        - "testdata/ 下所有用例结果"
+        - "测试计划（作为报告框架）"
+      outputs:
+        - "reports/{{DATE}}-test-results.md"
+    # ── 质量门（分层模式）──
     quality_gate:
+      - "Index 报告存在，包含摘要表格和批次导航链接"
+      - "每个 batch 目录下有完整批次报告"
+      - "Index 统计数据与各 batch 报告合计一致"
+      - "所有 TC 均在某个 batch 报告中出现"
+    # ── 质量门（Legacy 模式）──
+    legacy_quality_gate:
       - "报告包含：环境信息、用例汇总表、每个用例详情、已知问题、结论"
       - "PASS/FAIL 统计准确"
       - "每个 FAILED 用例有失败原因和建议"
     actions:
-      - "汇总所有用例执行结果"
-      - "生成用例汇总表（ID、标题、结果、耗时）"
-      - "为每个 FAILED 用例编写详细分析"
-      - "输出整体结论和建议"
+      - "检测 batch-manifest.json 决定模式"
+      - "分层：生成 manifest → 并行 batch 报告 → 聚合 Index"
+      - "Legacy：汇总所有结果 → 单文件报告"
 
   # ── 7. Optimize：流程优化回顾 ──
   optimize:

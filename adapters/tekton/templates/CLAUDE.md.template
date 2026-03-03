@@ -71,12 +71,15 @@ export KUBECONFIG={{KUBECONFIG_PATH}}
 | coordinator | `.claude/agents/coordinator.md` | 编排生命周期 | ❌ | ❌ |
 | env-checker | `.claude/agents/env-checker.md` | 环境预检 | ❌ | ❌ |
 | test-executor | `.claude/agents/test-executor.md` | 执行测试 | ✅ | testdata/ only |
-| report-generator | `.claude/agents/report-generator.md` | 生成报告 | ❌ | reports/ only |
+| batch-reporter | `.claude/agents/batch-reporter.md` | 单批次报告生成（分层模式） | ❌ | reports/ only |
+| summary-aggregator | `.claude/agents/summary-aggregator.md` | Index 报告聚合（分层模式） | ❌ | reports/ only |
+| report-generator | `.claude/agents/report-generator.md` | 单文件报告（Legacy 模式） | ❌ | reports/ only |
 
 ### 并行执行
 
 - **brainstorm 阶段**: coordinator + env-checker 可并行
 - **execute 阶段**: 最多 3 个 test-executor 并行（独立用例）
+- **report 阶段（分层模式）**: 最多 3 个 batch-reporter 并行
 
 ---
 

@@ -35,6 +35,11 @@ done
 - `lifecycle/stages.yaml` — 阶段定义
 - `reports/` 目录下最新报告（如有）
 
+**报告检测**：
+- 优先查找 `reports/YYYY-MM-DD-test-results.md`（Index 或 Legacy 报告）
+- 如果发现 `reports/batch-*/` 目录，识别为**分层报告模式**，统计 batch 数量
+- 显示报告摘要时，优先从 Index 报告的 `## 摘要` section 读取
+
 ### 3. 显示 ASCII 生命周期图
 
 ```
@@ -80,3 +85,6 @@ done
 - "查看完整阶段历史？"
 - "查看用例详情？"
 - "查看最新报告？"
+
+如果是分层报告模式，额外提示：
+- "查看某个批次的详细报告？"（列出 batch 列表供选择）

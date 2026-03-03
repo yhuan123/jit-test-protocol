@@ -42,7 +42,9 @@
 | coordinator | 编排生命周期 | no | no |
 | env-checker | 环境预检 | no (read-only) | no |
 | test-executor | 执行测试 | yes (test NS only) | testdata/ only |
-| report-generator | 生成报告 | no | reports/ only |
+| batch-reporter | 单批次报告（分层模式） | no | reports/ only |
+| summary-aggregator | Index 报告聚合（分层模式） | no | reports/ only |
+| report-generator | 单文件报告（Legacy） | no | reports/ only |
 
 ## 自动诊断
 

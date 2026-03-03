@@ -1,6 +1,6 @@
 # JiT Test Protocol — Agent 角色定义
 
-本文件定义 4 种 agent 角色的**职责和权限边界**。
+本文件定义 agent 角色的**职责和权限边界**。
 具体 prompt 实现由 Adapter 的 `agents/` 目录提供。
 
 ---
@@ -12,7 +12,9 @@
 | coordinator | 生命周期编排、委派任务、检查质量门 | ❌ | ❌ | ❌ |
 | env-checker | 集群环境预检，只读验证 | ❌ 只读 | ❌ | ✅ 只读命令 |
 | test-executor | apply 测试资源、等待结果、收集日志、自动诊断 | ✅ 仅测试 NS | ✅ 仅 testdata/ | ✅ |
-| report-generator | 汇编测试结果为 Markdown 报告 | ❌ | ✅ 仅 reports/ | ❌ |
+| batch-reporter | 单批次报告生成（分层模式） | ❌ | ✅ 仅 reports/ | ❌ |
+| summary-aggregator | Index 报告聚合（分层模式） | ❌ | ✅ 仅 reports/ | ❌ |
+| report-generator *(legacy)* | 单文件报告生成（降级模式） | ❌ | ✅ 仅 reports/ | ❌ |
 
 ---
 
@@ -184,7 +186,80 @@ Read, Glob, Grep, Bash, Write, Edit
 
 ---
 
-## Report-Generator
+## Batch-Reporter（分层模式）
+
+### 职责
+1. 读取**单个 batch** 的测试结果（由 batch-manifest.json 指定的 TC 子集）
+2. 为该 batch 生成完整的 Markdown 报告
+3. 报告必须以**标准 `## 摘要` section** 开头，供 summary-aggregator 解析
+
+### 权限边界
+
+**可以做**：
+- 读取项目中任何文件（特别是 testdata/、plans/）
+- 在 `reports/batch-{N}-{label}/` 目录下创建和编辑报告文件
+
+**不可以做**：
+- ❌ 不能执行任何 shell 命令
+- ❌ 不能修改 `testdata/`、`plans/`、`lifecycle/`、`.claude/` 下的文件
+- ❌ 不能修改 `memory/context.md`
+- ❌ 不能读取或写入其他 batch 的报告目录
+
+### 生成规则
+
+1. **数据来源**：只读取该 batch 指定的 TC 结果文件，不读取其他 batch 的数据
+2. **准确性**：PASS/FAIL 计数必须与该 batch 的实际结果文件一致
+3. **日志引用**：只引用关键片段（不超过 20 行），完整日志引用文件路径
+4. **Emoji 规范**：✅ PASSED、🔴 FAILED、⏱️ TIMEOUT、⏭️ SKIPPED
+5. **摘要格式**：报告必须以固定格式的 `## 摘要` section 开头（见模板）
+6. **缺失结果**：如果 manifest 中的 TC 无对应 result.json，标记为 ⚠️ MISSING
+
+### 推荐 Tools (Claude Code)
+```
+Read, Glob, Grep, Write, Edit
+```
+
+---
+
+## Summary-Aggregator（分层模式）
+
+### 职责
+1. 读取所有 batch 报告的 `## 摘要` section（不读取完整报告）
+2. 聚合统计数据，生成 Index 报告
+3. 汇总所有 batch 的失败用例速览
+
+### 权限边界
+
+**可以做**：
+- 读取各 `reports/batch-{N}-{label}/batch-{N}-results.md` 的摘要部分
+- 读取 `memory/context.md`（项目元数据）
+- 在 `reports/` 顶层目录创建 Index 报告
+
+**不可以做**：
+- ❌ 不能执行任何 shell 命令
+- ❌ 不能读取 `testdata/` 原始数据
+- ❌ 不能修改 batch 报告文件
+- ❌ 不能修改 `memory/context.md`
+
+### 生成规则
+
+1. **只读摘要**：从各 batch 报告中只读取 `## 摘要` 到下一个 `##` 之间的内容
+2. **数据聚合**：Index 中的统计数字必须等于所有 batch 摘要的合计
+3. **失败速览**：从各 batch 摘要的 `### 失败用例` 表格中提取失败 TC 汇总
+4. **批次导航**：为每个 batch 生成相对路径链接
+5. **目标行数**：Index 报告目标 < 100 行（软限制）
+
+### 推荐 Tools (Claude Code)
+```
+Read, Glob, Grep, Write, Edit
+```
+
+---
+
+## Report-Generator *(Legacy)*
+
+> **Legacy 模式**：当项目无 `batch-manifest.json` 或执行回归测试时，`/jit-report` 降级使用此 agent。
+> 新项目推荐使用 batch-reporter + summary-aggregator 分层模式。
 
 ### 职责
 1. 读取 testdata/ 中的所有测试结果

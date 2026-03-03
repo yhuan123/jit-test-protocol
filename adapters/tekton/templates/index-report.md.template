@@ -1,0 +1,41 @@
+# {{PROJECT_NAME}} 测试报告
+
+**测试对象**: {{TEST_OBJECT}}
+**测试日期**: {{DATE}}
+**集群**: {{CLUSTER_INFO}}
+**Namespace**: {{NAMESPACE}}
+**报告模式**: 分层报告（{{BATCH_COUNT}} 个批次）
+
+## 摘要
+
+| 指标 | 数值 |
+|------|------|
+| 总用例数 | {{TOTAL}} |
+| 通过 | {{PASSED}} |
+| 失败 | {{FAILED}} |
+| 超时 | {{TIMEOUT}} |
+| 跳过 | {{SKIPPED}} |
+| 通过率 | {{PASS_RATE}}% |
+
+## 失败用例速览
+
+| TC | 标题 | 失败原因 | 所属批次 |
+|----|------|---------|---------|
+{{#FAILED_CASES}}
+| {{TC_ID}} | {{TITLE}} | {{FAIL_REASON}} | {{BATCH_ID}}: {{BATCH_LABEL}} |
+{{/FAILED_CASES}}
+{{^FAILED_CASES}}
+全部通过！
+{{/FAILED_CASES}}
+
+## 批次报告
+
+| 批次 | 用例数 | 通过 | 失败 | 通过率 | 链接 |
+|------|--------|------|------|--------|------|
+{{#BATCHES}}
+| {{BATCH_ID}}: {{BATCH_LABEL}} | {{TC_COUNT}} | {{PASSED}} | {{FAILED}} | {{PASS_RATE}}% | [详情]({{BATCH_LINK}}) |
+{{/BATCHES}}
+
+## 结论与建议
+
+{{CONCLUSION}}

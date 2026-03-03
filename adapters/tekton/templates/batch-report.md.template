@@ -1,0 +1,79 @@
+# {{BATCH_LABEL}} — 批次测试报告
+
+**批次**: {{BATCH_ID}}: {{BATCH_LABEL}}
+**用例数**: {{TC_COUNT}}
+**生成时间**: {{TIMESTAMP}}
+
+## 摘要
+
+| 指标 | 数值 |
+|------|------|
+| 批次 | {{BATCH_ID}}: {{BATCH_LABEL}} |
+| 用例数 | {{TC_COUNT}} |
+| 通过 | {{PASSED}} |
+| 失败 | {{FAILED}} |
+| 超时 | {{TIMEOUT}} |
+| 跳过 | {{SKIPPED}} |
+| 通过率 | {{PASS_RATE}}% |
+
+### 失败用例
+
+| TC | 标题 | 失败原因 |
+|----|------|---------|
+{{#FAILED_CASES}}
+| {{TC_ID}} | {{TITLE}} | {{FAIL_REASON}} |
+{{/FAILED_CASES}}
+{{^FAILED_CASES}}
+无
+{{/FAILED_CASES}}
+
+## 用例汇总
+
+| TC | 用例标题 | 结论 | 耗时 | 失败原因 |
+|----|----------|------|------|---------|
+{{#ALL_CASES}}
+| {{TC_ID}} | {{TITLE}} | {{STATUS_EMOJI}} {{STATUS}} | {{DURATION}}s | {{FAIL_REASON}} |
+{{/ALL_CASES}}
+
+## 用例详情
+
+{{#ALL_CASES}}
+### {{TC_ID}}: {{TITLE}}
+
+**结论**: {{STATUS_EMOJI}} {{STATUS}}
+**耗时**: {{DURATION}}s
+**资源**: {{RESOURCE_TYPE}}/{{RESOURCE_NAME}}
+
+**验证命令**: `{{VERIFY_COMMAND}}`
+**预期**: {{EXPECTED}}
+**实际**: {{ACTUAL}}
+
+{{#IS_FAILED}}
+**自动诊断**:
+- 匹配模式: {{MATCHED_PATTERN}}
+- 描述: {{DIAGNOSIS_DESC}}
+- 建议: {{DIAGNOSIS_SUGGESTION}}
+
+**关键日志** (最多 20 行):
+```
+{{LOG_EXCERPT}}
+```
+> 完整日志: {{LOGS_FILE}}
+{{/IS_FAILED}}
+
+---
+
+{{/ALL_CASES}}
+
+## 发现的问题
+
+{{#BUGS}}
+### {{BUG_ID}}: {{BUG_TITLE}}
+- 严重级别: {{SEVERITY}}
+- 影响范围: {{AFFECTED_CASES}}
+- 根因分析: {{ROOT_CAUSE}}
+- 建议修复: {{FIX_SUGGESTION}}
+{{/BUGS}}
+{{^BUGS}}
+本批次未发现新问题。
+{{/BUGS}}

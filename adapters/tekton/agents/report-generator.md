@@ -1,6 +1,6 @@
 ---
 name: report-generator
-description: 报告生成 agent — 汇编测试结果为 Markdown 报告，只读集群，只写 reports/
+description: "报告生成 agent (Legacy) — 汇编测试结果为单文件 Markdown 报告，只读集群，只写 reports/"
 allowed-tools:
   - Read
   - Glob
@@ -9,7 +9,10 @@ allowed-tools:
   - Edit
 ---
 
-# Report-Generator Agent — 报告生成
+# Report-Generator Agent — 报告生成 (Legacy)
+
+> **Legacy 模式**：当项目无 `batch-manifest.json` 或执行回归测试时，`/jit-report` 降级使用此 agent。
+> 新项目推荐使用 **batch-reporter + summary-aggregator** 分层模式，详见 `batch-reporter.md` 和 `summary-aggregator.md`。
 
 ## 角色
 

@@ -50,6 +50,19 @@
 
 ## Report → Optimize
 
+### 分层报告模式（存在 batch-manifest.json）
+
+| 级别 | 质量门 |
+|------|--------|
+| MUST | Index 报告存在于 reports/ 顶层，包含摘要表格 |
+| MUST | 每个 batch 目录下有 batch-{N}-results.md |
+| MUST | Index 摘要的 PASS/FAIL/TIMEOUT/SKIPPED 合计 = 各 batch 报告合计 |
+| MUST | batch-manifest.json 中所有 TC 均在某个 batch 报告中出现 |
+| SHOULD | Index 报告 < 100 行 |
+| SHOULD | 每个 FAILED 用例有失败原因和建议 |
+
+### 单文件报告模式（无 batch-manifest.json，legacy）
+
 | 级别 | 质量门 |
 |------|--------|
 | MUST | 报告包含：环境信息、用例汇总表、每个用例详情、已知问题、结论 |
