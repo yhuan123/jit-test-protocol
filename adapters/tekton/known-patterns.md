@@ -5,52 +5,41 @@
 
 ---
 
-## Pattern-T01: Hub Resolver 失败
+## Pattern-T01: Hub Resolver 参数错误
 
-**关键字**: `resolution request failed`, `error requesting resource from Hub`, `failed to fetch task`, `hub resolution error`
+**关键字**: `resolution request failed`, `error requesting resource from Hub`, `failed to fetch task`, `hub resolution error`, `TaskRunResolutionFailed`, `invalid value`, `type`
 
-**原因**: Hub Resolver 无法解析指定的 Task/Pipeline 版本。
+**原因**: Hub Resolver 无法解析指定的 Task/Pipeline。常见子场景：
+1. **版本不存在**: Hub 上无该 Task/Pipeline 版本
+2. **参数名错误**: 使用了无效参数（如 `type: task`），正确应为 `kind: task`
+3. **Resolver 不可用**: Hub Resolver 部署异常或网络不通
+
+**有效参数**: `catalog`、`kind`、`name`、`version`
 
 **修复建议**:
-1. 确认 Hub Resolver 部署正常：`kubectl get deploy -n tekton-pipelines-resolvers`
-2. 确认 Hub 上存在该版本：检查 catalog repo 的 tag/release
-3. 检查 Resolver 配置：`kubectl get cm hub-resolver-config -n tekton-pipelines-resolvers -o yaml`
-4. 检查网络：Resolver 需要访问 Hub API
+1. 确认参数格式正确：
+   ```yaml
+   taskRef:
+     resolver: hub
+     params:
+     - name: catalog
+       value: catalog
+     - name: kind
+       value: task
+     - name: name
+       value: helm-upgrade
+     - name: version
+       value: "0.1"
+   ```
+2. 确认 Hub Resolver 部署正常：`kubectl get deploy -n tekton-pipelines-resolvers`
+3. 确认 Hub 上存在该版本：检查 catalog repo 的 tag/release
+4. 检查 Resolver 配置：`kubectl get cm hub-resolver-config -n tekton-pipelines-resolvers -o yaml`
 
-**相关用例类型**: 使用 Hub Resolver 引用 Task/Pipeline 的用例
+**相关用例类型**: 所有使用 Hub Resolver 的 TaskRun/PipelineRun
 
 ---
 
-## Pattern-T02: crane 循环覆盖
-
-**关键字**: `manifests | length`, `index append`, `crane index`
-
-**原因**: `crane index append` 在循环中调用时，每次从空 index 开始，最后一次覆盖之前所有结果。manifest 数量不等于源镜像数量。
-
-**修复建议**:
-1. 一次性传入所有 `-m` 参数，而非循环调用
-2. 验证命令：`skopeo inspect --raw <target> | jq '.manifests | length'` 应等于源镜像数量
-
-**相关用例类型**: merge-image Task 的所有合并用例
-
----
-
-## Pattern-T03: 重复源镜像导致 NOT_FOUND
-
-**关键字**: `NOT_FOUND: artifact`, `not found`, `pushing image`, `manifests/latest`
-
-**原因**: `crane index append` 传入两个相同的源镜像时，内部构建 index 引用了一个不存在的 manifest digest，导致 push index 时 registry 返回 NOT_FOUND。
-
-**修复建议**:
-1. 在 Task 脚本中对 sourceImages 做去重（`sort -u`）
-2. 如果不去重，至少在日志中 WARNING 提示存在重复源镜像
-3. 验证：传入去重后的镜像列表重跑
-
-**相关用例类型**: merge-image Task 中 sourceImages 包含重复条目的场景
-
----
-
-## Pattern-T04: Affinity Assistant 调度冲突
+## Pattern-T02: Affinity Assistant 调度冲突
 
 **关键字**: `PodScheduled`, `0/N nodes are available`, `affinity-assistant`, `node affinity conflict`
 
@@ -67,7 +56,7 @@
 
 ---
 
-## Pattern-T05: buildah SETFCAP 内核不兼容
+## Pattern-T03: buildah SETFCAP 内核不兼容
 
 **关键字**: `Error during unshare(CLONE_NEWUSER)`, `SETFCAP`, `Invalid argument`, `unshare`
 
@@ -79,3 +68,74 @@
 3. 检查节点内核版本：`uname -r`
 
 **相关用例类型**: 使用 buildah Task 的构建用例
+
+---
+
+## Pattern-T04: Tekton 参数类型与命名陷阱
+
+**关键字**: `param types don't match the user-specified type`, `Chart.yaml not found in /workspace/source/.`
+
+**原因**: Tekton Task 参数存在两类常见陷阱：
+1. **类型不匹配**: Task 定义参数为 `type: array`，但传入了 `string`。常见于 `ociRepos`、`valuesFiles` 等参数
+2. **参数名不一致**: Task 实际参数名与直觉不同（如 chart-build-push 用 `chartPath` 而非 `chartDir`），传入不存在的参数名会被 Tekton **静默忽略**，使用默认值
+
+**常见踩坑参数**:
+| Task | 参数 | 类型 | 易错写法 |
+|------|------|------|---------|
+| chart-build-push | `ociRepos` | array | 误传 string `demo-app`，需完整引用 `registry/project/chart:tag` |
+| chart-build-push | `chartPath` | string | 误写为 `chartDir` |
+| helm-upgrade | `valuesFiles` | array | 误传 JSON string `'["./file.yaml"]'` |
+
+**修复建议**:
+1. array 类型参数使用 YAML 列表格式：
+   ```yaml
+   - name: ociRepos
+     value:
+     - devops-harbor.alaudatech.net/helm-test/demo-app:0.3.0
+   - name: valuesFiles
+     value:
+     - ./deploy/values-prod.yaml
+   ```
+2. 不确定参数名时，查看 Task 定义：`kubectl get taskrun <name> -o jsonpath='{.status.taskSpec.params}'`
+
+**相关用例类型**: 所有使用 Hub Resolver 引用 Task 的用例
+
+---
+
+## Pattern-T05: Helm --wait 需要 replicasets 权限
+
+**关键字**: `replicasets.apps is forbidden`, `cannot list resource "replicasets"`
+
+**原因**: Helm `--wait` 需要 list replicasets 来检查 Deployment 就绪状态。最小 RBAC Role 仅包含 Deployment/Service/ConfigMap CRUD 时，会在 wait 阶段失败。
+
+**修复建议**:
+1. 最小 RBAC Role 需增加：`apps/replicasets: get,list,watch`
+2. 或使用 `wait: false` 跳过就绪检查
+
+**相关用例类型**: 使用受限 ServiceAccount 执行 helm-upgrade 且 wait=true 的用例
+
+---
+
+## Pattern-T06: git-clone basic-auth Secret 格式
+
+**关键字**: `could not read Username`, `fatal: unable to access`, `Authentication failed`
+
+**原因**: git-clone Task 的 basic-auth workspace 需要 Secret 包含 `.gitconfig` 和 `.git-credentials` 文件键，类型为 Opaque。使用 `kubernetes.io/basic-auth` 类型 + `username`/`password` 键不会生效。
+
+**修复建议**:
+1. Secret 格式：
+   ```yaml
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: git-basic-auth
+   type: Opaque
+   stringData:
+     .gitconfig: |
+       [credential "https://gitlab.example.com"]
+         helper = store
+     .git-credentials: |
+       https://user:token@gitlab.example.com
+   ```
+
+**相关用例类型**: 使用 git-clone basic-auth workspace 的用例
